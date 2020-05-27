@@ -3,17 +3,37 @@
 // load modules
 const express = require('express');
 const morgan = require('morgan');
+const users = require('./routes/users');
+const courses = require('./routes/courses');
+const {sequelize} = require('./models/index');
 
 // variable to enable global error logging
 const enableGlobalErrorLogging = process.env.ENABLE_GLOBAL_ERROR_LOGGING === 'true';
 
 // create the Express app
-const app = express();
+var app = express();
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 
 // setup morgan which gives us http request logging
 app.use(morgan('dev'));
 
+(async() => {
+  try {
+    await sequelize.authenticate();
+    //syncing the database
+    await sequelize.sync();
+    console.log('connection has been established sucessfully!');
+
+  } catch (error) {
+    console.log('unable to connect to the database:', error);
+  }
+
+})();
+
 // TODO setup your api routes here
+app.use('/api', users);
+app.use('/api', courses);
 
 // setup a friendly greeting for the root route
 app.get('/', (req, res) => {
@@ -23,7 +43,7 @@ app.get('/', (req, res) => {
 });
 
 // send 404 if no other route matched
-app.use((req, res) => {
+app.use((req, res, next) => {
   res.status(404).json({
     message: 'Route Not Found',
   });
