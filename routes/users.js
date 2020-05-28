@@ -1,11 +1,40 @@
 const express = require('express');
 const bcryptjs = require('bcryptjs');
-// const auth = require('basic-auth');
-const { check, validationResult } = require('express-validator');
-const {User, Sequelize} = require('../models/index');
+const {check, validationResult, body} = require('express-validator');
+const {User} = require('../models/index');
 const authenticateUser = require('./authenticateUser');
-// const Op = Sequelize.Op;
 const router = express.Router();
+
+const neededFields = [
+    check('firstName')
+        .exists({checkNull: true, checkFalsy: true})
+        .withMessage('Please provide a value for "firstName"'),
+    check('lastName')
+        .exists({checkNull: true, checkFalsy: true})
+        .withMessage('Please provide a value for "lastName"'),
+    check('emailAddress')
+        .isEmail()
+        .normalizeEmail()
+        .withMessage('Please provide valid "emailAddress"')
+        .exists({checkNull: true, checkFalsy: true})
+        .withMessage('Please provide a value for "emailAddress"'),
+    check('password')
+        .exists({checkNull: true, checkFalsy: true})
+        .withMessage('Please provide a value for "password"'),
+];
+
+const checkEmailAddressDuplicate =
+    body('email').custom((value, {req}) => {
+        return User.findOne({
+            where: {
+                emailAddress: req.body.emailAddress
+            }
+        }).then(user => {
+            if (user) {
+                return Promise.reject('E-mail already in use');
+            }
+        });
+    });
 
 function asyncHandler(cb) {
     return async (req, res, next) => {
@@ -18,7 +47,6 @@ function asyncHandler(cb) {
     }
 }
 
-//Get users
 router.get('/users', authenticateUser, asyncHandler(async (req, res) => {
     const user = req.currentUser;
     const users = await User.findByPk(user.id, {
@@ -27,56 +55,27 @@ router.get('/users', authenticateUser, asyncHandler(async (req, res) => {
     res.status(200).json(users);
 }));
 
-router.post('/users', [
-    check('firstName')
-        .exists({ checkNull: true, checkFalsy: true })
-        .withMessage('Please provide a value for "firstName"'),
-    check('lastName')
-        .exists({ checkNull: true, checkFalsy: true })
-        .withMessage('Please provide a value for "lastName"'),
-    check('emailAddress')
-        .isEmail()
-        .withMessage('Please provide valid "emailAddress"')
-        .exists({ checkNull: true, checkFalsy: true })
-        .withMessage('Please provide a value for "emailAddress"'),
-    check('password')
-        .exists({ checkNull: true, checkFalsy: true })
-        .withMessage('Please provide a value for "password"'),
-], async (req, res) => {
-    try {
-        // Attempt to get the validation result from the Request object.
-        const errors = validationResult(req);
+router.post('/users', neededFields, checkEmailAddressDuplicate,
+    async (req, res) => {
+        try {
+            const errors = validationResult(req);
+            if (!errors.isEmpty()) {
+                const errorMessages = errors.array().map(error => error.msg);
+                return res.status(400).json({errors: errorMessages});
+            }
 
-        // If there are validation errors...
-        if (!errors.isEmpty()) {
-            // Use the Array `map()` method to get a list of error messages.
-            const errorMessages = errors.array().map(error => error.msg);
-
-            // Return the validation errors to the client.
-            return res.status(400).json({ errors: errorMessages });
+            const user = await req.body;
+            user.password = bcryptjs.hashSync(user.password);
+            await User.create(user);
+            return res.location("\\").status(201).end();
+        } catch (error) {
+            if (error === 'SequelizeUniqueConstraintError') {
+                res.status(500).json('The credentials you entered are already in use').end();
+            } else {
+                res.status(500).json('There was a problem with your request')
+            }
         }
 
-        // Get user req body
-        const user = await req.body;
-
-        // Hash the new user's password.
-        user.password = bcryptjs.hashSync(user.password);
-
-
-        // Add the user to the `users` array.
-        await User.create(user);
-
-        // Set the status to 201 Created and end the response.
-        return res.location("\\").status(201).end();
-    } catch (error) {
-        if (error === 'SequelizeUniqueConstraintError') {
-            res.status(500).json('The credentials you entered are already in use').end();
-        }
-        else {
-            res.status(500).json('There was a problem with your request')
-        }
-    }
-
-});
+    });
 
 module.exports = router;

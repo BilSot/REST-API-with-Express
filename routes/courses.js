@@ -1,7 +1,7 @@
 const express = require('express');
 const { check, validationResult } = require('express-validator');
-const {User, Course, Sequelize} = require('../models/index');
-const Op = Sequelize.Op;
+const {User, Course} = require('../models/index');
+const authenticateUser = require('./authenticateUser');
 const router = express.Router();
 
 function asyncHandler(cb) {
@@ -17,9 +17,11 @@ function asyncHandler(cb) {
 
 router.get('/courses', asyncHandler(async(req, res, next) => {
     const allCourses = await Course.findAll({
+        attributes: { exclude: ['createdAt', 'updatedAt'] },
         include: [
             {
-                model: User
+                model: User,
+                attributes: ['firstName', 'lastName', 'emailAddress']
             }
         ]
     });
@@ -28,6 +30,7 @@ router.get('/courses', asyncHandler(async(req, res, next) => {
 
 router.get('/courses/:id', asyncHandler(async(req, res, next) => {
     let course = await Course.findByPk(req.params.id, {
+        attributes: { exclude: ['createdAt', 'updatedAt'] },
         include: [
             {
                 model: User,
@@ -48,27 +51,22 @@ router.post('/courses', [
         .withMessage('Please provide a value for "title"'),
     check('description')
         .exists({ checkNull: true, checkFalsy: true })
-        .withMessage('Please provide a value for "description"'),
-    check('userId')
-        .exists({ checkNull: true, checkFalsy: true })
-        .withMessage('Please provide a value for "userId"')
-], asyncHandler(async(req, res, next) => {
+        .withMessage('Please provide a value for "description"')
+], authenticateUser, asyncHandler(async(req, res, next) => {
     const errors = validationResult(req);
-
-    // If there are validation errors...
     if (!errors.isEmpty()) {
-        // Use the Array `map()` method to get a list of error messages.
         const errorMessages = errors.array().map(error => error.msg);
-
-        // Return the validation errors to the client.
         return res.status(400).json({ errors: errorMessages });
     }else{
-        await Course.create(req.body);
+        const user = req.currentUser;
+        let newCourse = {...req.body};
+        newCourse.userId = user.id;
+        await Course.create(newCourse);
         return res.location("\\").status(201).end();
     }
 }));
 
-router.put('/courses/:id', [
+router.put('/courses/:id', authenticateUser, [
     check('title')
         .exists({ checkNull: true, checkFalsy: true })
         .withMessage('Please provide a value for "title"'),
@@ -79,20 +77,44 @@ router.put('/courses/:id', [
     const errors = validationResult(req);
 
     if (!errors.isEmpty()) {
-        // Use the Array `map()` method to get a list of error messages.
         const errorMessages = errors.array().map(error => error.msg);
-
-        // Return the validation errors to the client.
         return res.status(400).json({errors: errorMessages});
     }else {
+        const user = req.currentUser;
         let course = await Course.findByPk(req.params.id);
         if (course) {
-            await course.update(req.body);
-            res.status(204).end();
+            if(course.userId === user.id) {
+                await course.update(req.body);
+                res.status(204).end();
+            }else{
+                let err = new Error("Course can not be updated by this user/ Access denied");
+                err.status = 403;
+                next(err);
+            }
         } else {
             let err = new Error("Course not found");
+            err.status = 404;
             next(err);
         }
+    }
+}));
+
+router.delete('/courses/:id', authenticateUser, asyncHandler(async(req, res, next) => {
+    const user = req.currentUser;
+    let course = await Course.findByPk(req.params.id);
+    if(course){
+        if(course.userId === user.id) {
+            await course.destroy();
+            res.status(204).end();
+        }else{
+            let err = new Error("Course can not be updated by this user/ Access denied");
+            err.status = 403;
+            next(err);
+        }
+    }else{
+        let err = new Error("Course not found");
+        err.status = 404;
+        next(err);
     }
 }));
 
