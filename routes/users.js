@@ -3,6 +3,7 @@ const bcryptjs = require('bcryptjs');
 const {check, validationResult, body} = require('express-validator');
 const {User} = require('../models/index');
 const authenticateUser = require('./authenticateUser');
+const asyncHandler = require('./asyncHandler');
 const router = express.Router();
 
 const neededFields = [
@@ -36,17 +37,9 @@ const checkEmailAddressDuplicate =
         });
     });
 
-function asyncHandler(cb) {
-    return async (req, res, next) => {
-        try {
-            await cb(req, res, next)
-        } catch (error) {
-            res.status = 404;
-            next(error);
-        }
-    }
-}
-
+/*
+GET the currently authenticated user
+ */
 router.get('/users', authenticateUser, asyncHandler(async (req, res) => {
     const user = req.currentUser;
     const users = await User.findByPk(user.id, {
@@ -55,6 +48,9 @@ router.get('/users', authenticateUser, asyncHandler(async (req, res) => {
     res.status(200).json(users);
 }));
 
+/*
+POST for new user creation. Checks for all the required fields and for e-mail address duplication
+ */
 router.post('/users', neededFields, checkEmailAddressDuplicate,
     async (req, res) => {
         try {

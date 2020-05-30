@@ -2,20 +2,13 @@ const express = require('express');
 const { check, validationResult } = require('express-validator');
 const {User, Course} = require('../models/index');
 const authenticateUser = require('./authenticateUser');
+const asyncHandler = require('./asyncHandler');
 const router = express.Router();
 
-function asyncHandler(cb) {
-    return async (req, res, next) => {
-        try {
-            await cb(req, res, next)
-        } catch (error) {
-            res.status = 404;
-            next(error);
-        }
-    }
-}
-
-router.get('/courses', asyncHandler(async(req, res, next) => {
+/*
+GET all the courses, including the information of the Users assigned to them
+ */
+router.get('/courses', asyncHandler(async(req, res) => {
     const allCourses = await Course.findAll({
         attributes: { exclude: ['createdAt', 'updatedAt'] },
         include: [
@@ -28,6 +21,9 @@ router.get('/courses', asyncHandler(async(req, res, next) => {
     res.status(200).json(allCourses);
 }));
 
+/*
+GET the course with the matching id, including the information of the User assigned to it
+ */
 router.get('/courses/:id', asyncHandler(async(req, res, next) => {
     let course = await Course.findByPk(req.params.id, {
         attributes: { exclude: ['createdAt', 'updatedAt'] },
@@ -41,10 +37,15 @@ router.get('/courses/:id', asyncHandler(async(req, res, next) => {
     if(course) {
         res.status(200).json(course);
     }else{
-        next();
+        let err = new Error("Course not found");
+        err.status = 404;
+        next(err);
     }
 }));
 
+/*
+POST for new course creation, assigned to the authenticated user
+ */
 router.post('/courses', [
     check('title')
         .exists({ checkNull: true, checkFalsy: true })
@@ -52,7 +53,7 @@ router.post('/courses', [
     check('description')
         .exists({ checkNull: true, checkFalsy: true })
         .withMessage('Please provide a value for "description"')
-], authenticateUser, asyncHandler(async(req, res, next) => {
+], authenticateUser, asyncHandler(async(req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
         const errorMessages = errors.array().map(error => error.msg);
@@ -66,6 +67,9 @@ router.post('/courses', [
     }
 }));
 
+/*
+PUT method/editing a course - which is allowed only if the authenticated user is assigned to the course selected
+ */
 router.put('/courses/:id', authenticateUser, [
     check('title')
         .exists({ checkNull: true, checkFalsy: true })
@@ -87,7 +91,7 @@ router.put('/courses/:id', authenticateUser, [
                 await course.update(req.body);
                 res.status(204).end();
             }else{
-                let err = new Error("Course can not be updated by this user/ Access denied");
+                let err = new Error("Course can not be updated by this user.");
                 err.status = 403;
                 next(err);
             }
@@ -99,6 +103,9 @@ router.put('/courses/:id', authenticateUser, [
     }
 }));
 
+/*
+DELETE a course - which is allowed only if the authenticated user is assigned to the course selected
+ */
 router.delete('/courses/:id', authenticateUser, asyncHandler(async(req, res, next) => {
     const user = req.currentUser;
     let course = await Course.findByPk(req.params.id);
@@ -107,7 +114,7 @@ router.delete('/courses/:id', authenticateUser, asyncHandler(async(req, res, nex
             await course.destroy();
             res.status(204).end();
         }else{
-            let err = new Error("Course can not be updated by this user/ Access denied");
+            let err = new Error("Course can not be updated by this user.");
             err.status = 403;
             next(err);
         }
