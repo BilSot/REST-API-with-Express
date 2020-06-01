@@ -63,7 +63,7 @@ router.post('/users', neededFields, checkEmailAddressDuplicate,
             const user = await req.body;
             user.password = bcryptjs.hashSync(user.password);
             await User.create(user);
-            return res.location("\\").status(201).end();
+            return res.location("/").status(201).end();
         } catch (error) {
             if (error === 'SequelizeUniqueConstraintError') {
                 res.status(500).json('The credentials you entered are already in use').end();

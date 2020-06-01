@@ -63,7 +63,7 @@ router.post('/courses', [
         let newCourse = {...req.body};
         newCourse.userId = user.id;
         await Course.create(newCourse);
-        return res.location("\\").status(201).end();
+        return res.location("/").status(201).end();
     }
 }));
 
