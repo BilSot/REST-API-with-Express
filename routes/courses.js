@@ -62,8 +62,8 @@ router.post('/courses', [
         const user = req.currentUser;
         let newCourse = {...req.body};
         newCourse.userId = user.id;
-        await Course.create(newCourse);
-        return res.status(201).location(`courses/${newCourse.id}`).end();
+        const newlyCreatedCourse = await Course.create(newCourse);
+        return res.status(201).location(`courses/${newlyCreatedCourse.id}`).end();
     }
 }));
 
