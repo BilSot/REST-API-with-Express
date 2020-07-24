@@ -25,7 +25,8 @@ const neededFields = [
 ];
 
 const checkEmailAddressDuplicate =
-    body('email').custom((value, {req}) => {
+    body('emailAddress').custom((value, {req}) => {
+        console.log(req.body.emailAddress);
         return User.findOne({
             where: {
                 emailAddress: req.body.emailAddress
